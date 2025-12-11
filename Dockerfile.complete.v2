@@ -1,5 +1,5 @@
-# 완전한 솔루션: Local Bot API Server + 프록시 서버를 하나의 컨테이너에서 실행
-# 이 방법으로 Railway에 한 번에 배포 가능
+# 완전한 솔루션: 공식 Docker 이미지 사용 (더 안정적)
+# Local Bot API Server + 프록시 서버를 하나의 컨테이너에서 실행
 
 FROM ubuntu:22.04
 
@@ -7,7 +7,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # 필수 패키지 설치
 RUN apt-get update && apt-get install -y \
-    wget \
     curl \
     ca-certificates \
     python3.11 \
@@ -18,13 +17,10 @@ RUN apt-get update && apt-get install -y \
 # Python 심볼릭 링크 생성
 RUN ln -s /usr/bin/python3.11 /usr/bin/python
 
-# 공식 Telegram Bot API Server 바이너리 다운로드
-# 최신 버전: https://github.com/tdlib/telegram-bot-api/releases
-# GitHub API를 통해 최신 릴리스 자동 다운로드
-RUN curl -sL https://api.github.com/repos/tdlib/telegram-bot-api/releases/latest | \
-    grep -o '"browser_download_url": "[^"]*Linux_x86_64.tar.gz"' | \
+# 공식 Telegram Bot API Server 바이너리 다운로드 (최신 릴리스 자동 감지)
+RUN curl -s https://api.github.com/repos/tdlib/telegram-bot-api/releases/latest | \
+    grep "browser_download_url.*Linux_x86_64.tar.gz" | \
     cut -d '"' -f 4 | \
-    head -1 | \
     xargs -I {} curl -L -o telegram-bot-api.tar.gz {} \
     && tar -xzf telegram-bot-api.tar.gz \
     && mv telegram-bot-api /usr/local/bin/ \
