@@ -4,8 +4,9 @@ FROM aiogram/telegram-bot-api:latest
 # 포트 노출
 EXPOSE 8080
 
-# 기본 ENTRYPOINT 덮어쓰기
-ENTRYPOINT []
+# 기본 ENTRYPOINT 완전히 덮어쓰기
+ENTRYPOINT ["/bin/sh", "-c"]
 
 # 환경 변수를 직접 사용해서 실행
-CMD ["sh", "-c", "telegram-bot-api --api-id=${TELEGRAM_API_ID} --api-hash=${TELEGRAM_API_HASH} --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api"]
+# 바이너리 경로를 찾아서 실행
+CMD ["echo 'Starting with api-id and api-hash...' && telegram-bot-api --api-id=${TELEGRAM_API_ID} --api-hash=${TELEGRAM_API_HASH} --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api"]
