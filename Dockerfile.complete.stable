@@ -7,5 +7,5 @@ EXPOSE 8080
 # 기본 ENTRYPOINT 완전히 덮어쓰기
 ENTRYPOINT ["/bin/sh", "-c"]
 
-# 실행 (에러 출력 포함)
-CMD ["echo 'Starting telegram-bot-api...' && echo 'API_ID:' $TELEGRAM_API_ID && echo 'PORT:' $PORT && exec telegram-bot-api --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api 2>&1"]
+# 바이너리 경로 확인 후 실행
+CMD ["echo 'Finding telegram-bot-api...' && which telegram-bot-api && echo 'Starting...' && telegram-bot-api --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api -v 3 || echo 'FAILED with exit code:' $?"]
