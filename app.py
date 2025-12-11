@@ -221,45 +221,50 @@ def webhook():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/bot<token>/getFile', methods=['POST', 'GET'])
-def bot_getfile(token):
+@app.route('/bot<path:token_and_method>', methods=['POST', 'GET'])
+def bot_api_proxy(token_and_method):
     """
     Telegram 표준 URL 형식 지원
-    /bot{TOKEN}/getFile
+    /bot{TOKEN}/{method}
     """
     try:
+        # token과 method 분리 (예: "8517760418:AAFMwm.../getFile")
+        parts = token_and_method.split('/')
+        if len(parts) < 2:
+            return jsonify({'ok': False, 'error_code': 400, 'description': 'Invalid URL format'}), 400
+        
+        token = parts[0]
+        method = '/'.join(parts[1:])
+        
         if request.method == 'POST':
             data = request.get_json() or {}
         else:
             data = request.args.to_dict()
         
-        file_id = data.get('file_id')
-        if not file_id:
-            return jsonify({'ok': False, 'error_code': 400, 'description': 'file_id is required'}), 400
+        # Local Bot API로 요청 전달
+        local_url = f'{LOCAL_API_URL}/bot{token}/{method}'
+        local_response = requests.post(local_url, json=data, timeout=60)
         
-        # Local Bot API로 getFile 호출
-        local_getfile_url = f'{LOCAL_API_URL}/{token}/getFile'
-        local_response = requests.post(local_getfile_url, json={'file_id': file_id}, timeout=60)
-        
-        if local_response.status_code != 200:
-            return jsonify(local_response.json()), local_response.status_code
-        
-        local_file_info = local_response.json()
-        if not local_file_info.get('ok'):
-            return jsonify(local_file_info), 400
-        
-        return jsonify(local_file_info), 200
+        return jsonify(local_response.json()), local_response.status_code
         
     except Exception as e:
         return jsonify({'ok': False, 'error_code': 500, 'description': str(e)}), 500
 
-@app.route('/file/bot<token>/<path:file_path>', methods=['GET'])
-def bot_file_download(token, file_path):
+@app.route('/file/bot<path:token_and_path>', methods=['GET'])
+def bot_file_download(token_and_path):
     """
     Telegram 표준 파일 다운로드 URL 형식 지원
     /file/bot{TOKEN}/{file_path}
     """
     try:
+        # token과 file_path 분리
+        parts = token_and_path.split('/')
+        if len(parts) < 2:
+            return jsonify({'ok': False, 'error_code': 400, 'description': 'Invalid URL format'}), 400
+        
+        token = parts[0]
+        file_path = '/'.join(parts[1:])
+        
         # 로컬 파일 시스템에서 찾기
         # --local 모드에서 파일은 /var/lib/telegram-bot-api/{token}/{file_path}에 저장됨
         possible_paths = [
