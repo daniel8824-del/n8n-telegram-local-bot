@@ -1,11 +1,37 @@
-# aiogram/telegram-bot-api 이미지 사용
+# aiogram/telegram-bot-api 이미지 + Flask 프록시 서버
 FROM aiogram/telegram-bot-api:latest
+
+# Python 및 pip 설치
+USER root
+RUN apk add --no-cache python3 py3-pip
+
+# 작업 디렉토리
+WORKDIR /app
+
+# Python 의존성 설치
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+
+# 애플리케이션 코드 복사
+COPY app.py .
+
+# 데이터 디렉토리 생성
+RUN mkdir -p /var/lib/telegram-bot-api
+
+# 시작 스크립트 생성
+RUN echo '#!/bin/sh' > /start.sh && \
+    echo 'echo "Starting Bot API server on port 8081..."' >> /start.sh && \
+    echo 'telegram-bot-api --local --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=8081 --dir=/var/lib/telegram-bot-api &' >> /start.sh && \
+    echo 'sleep 5' >> /start.sh && \
+    echo 'echo "Starting Flask proxy on port $PORT..."' >> /start.sh && \
+    echo 'cd /app && python3 app.py' >> /start.sh && \
+    chmod +x /start.sh
 
 # 포트 노출
 EXPOSE 8080
 
-# 기본 ENTRYPOINT 완전히 덮어쓰기
-ENTRYPOINT ["/bin/sh", "-c"]
+# ENTRYPOINT 덮어쓰기
+ENTRYPOINT []
 
-# --local 모드로 실행 (20MB 제한 해제)
-CMD ["exec telegram-bot-api --local --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api"]
+# 시작
+CMD ["/bin/sh", "/start.sh"]

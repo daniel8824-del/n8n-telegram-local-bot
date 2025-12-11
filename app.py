@@ -91,29 +91,49 @@ def get_file():
                     'message': 'Files larger than 2GB are not supported. Please save file_id only.'
                 }), 413
             
-            # Local Bot API로 파일 다운로드 시도
+            # Local Bot API로 getFile 호출해서 로컬 파일 경로 얻기
             try:
-                local_file_url = f'{LOCAL_API_URL}/file/bot{BOT_TOKEN}/{file_path}'
-                file_response = requests.get(local_file_url, stream=True, timeout=300)
+                local_getfile_url = f'{LOCAL_API_URL}/bot{BOT_TOKEN}/getFile'
+                local_response = requests.post(local_getfile_url, json={'file_id': file_id}, timeout=60)
                 
-                if file_response.status_code != 200:
-                    # Local API 실패 시 에러 반환
+                if local_response.status_code != 200:
                     return jsonify({
                         'ok': False,
-                        'error': 'Failed to download file from Local API',
-                        'status_code': file_response.status_code,
-                        'message': 'Local Bot API Server may not be running. Please check LOCAL_API_URL.',
-                        'file_size_mb': round(file_size / (1024 * 1024), 2),
-                        'recommendation': 'Ensure Local Bot API Server is running or use file_id storage method'
-                    }), file_response.status_code
+                        'error': 'Failed to get file from Local API',
+                        'status_code': local_response.status_code,
+                        'message': 'Local Bot API Server may not be running.',
+                        'file_size_mb': round(file_size / (1024 * 1024), 2)
+                    }), local_response.status_code
                 
-                # 파일 스트림 반환
-                return send_file(
-                    io.BytesIO(file_response.content),
-                    mimetype='application/octet-stream',
-                    as_attachment=True,
-                    download_name=file_path.split('/')[-1] if '/' in file_path else 'file'
-                )
+                local_file_info = local_response.json()
+                if not local_file_info.get('ok'):
+                    return jsonify(local_file_info), 400
+                
+                local_file_path = local_file_info['result'].get('file_path', '')
+                
+                # 로컬 파일 시스템에서 직접 읽기
+                # file_path가 절대 경로일 수 있음 (--local 모드)
+                if local_file_path.startswith('/'):
+                    actual_path = local_file_path
+                else:
+                    actual_path = f'/var/lib/telegram-bot-api/{local_file_path}'
+                
+                if os.path.exists(actual_path):
+                    return send_file(
+                        actual_path,
+                        mimetype='application/octet-stream',
+                        as_attachment=True,
+                        download_name=local_file_path.split('/')[-1] if '/' in local_file_path else 'file'
+                    )
+                else:
+                    return jsonify({
+                        'ok': False,
+                        'error': 'File not found on local filesystem',
+                        'file_path': local_file_path,
+                        'actual_path': actual_path,
+                        'file_size_mb': round(file_size / (1024 * 1024), 2)
+                    }), 404
+                    
             except requests.exceptions.RequestException as e:
                 return jsonify({
                     'ok': False,
