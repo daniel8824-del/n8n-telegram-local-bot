@@ -7,5 +7,5 @@ EXPOSE 8080
 # 기본 ENTRYPOINT 완전히 덮어쓰기
 ENTRYPOINT ["/bin/sh", "-c"]
 
-# --local 모드 + --stat 옵션 (정적 파일 서빙)
-CMD ["exec telegram-bot-api --local --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api --stat"]
+# --local 모드로 실행 (20MB 제한 해제)
+CMD ["exec telegram-bot-api --local --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api"]
