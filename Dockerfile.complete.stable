@@ -1,15 +1,11 @@
-# Telegram Bot API Server - 간단한 버전
-# aiogram/telegram-bot-api 이미지 사용
+# Telegram Bot API Server - 안정적인 버전
+# 공식 tdlib/telegram-bot-api 이미지 사용
 
-FROM aiogram/telegram-bot-api:latest
-
-# 환경 변수 설정
-ENV TELEGRAM_API_ID=${TELEGRAM_API_ID}
-ENV TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+FROM ghcr.io/tdlib/telegram-bot-api:latest
 
 # Railway의 동적 포트 사용 (기본값: 8080)
-EXPOSE ${PORT:-8080}
+EXPOSE 8080
 
-# telegram-bot-api 실행 (올바른 경로)
-# shell 형식을 사용하여 환경 변수를 런타임에 확장
-CMD ["/bin/sh", "-c", "telegram-bot-api --local --api-id=${TELEGRAM_API_ID} --api-hash=${TELEGRAM_API_HASH} --http-port=${PORT:-8080}"]
+# telegram-bot-api 실행
+# shell 형식을 사용하여 Railway의 런타임 환경 변수를 직접 참조
+CMD ["/bin/sh", "-c", "telegram-bot-api --local --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080}"]
