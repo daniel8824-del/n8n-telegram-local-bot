@@ -1,11 +1,38 @@
 # Telegram Bot API Server - 안정적인 버전
-# 공식 tdlib/telegram-bot-api 이미지 사용
+# 직접 바이너리 다운로드 방식
 
-FROM ghcr.io/tdlib/telegram-bot-api:latest
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 필수 패키지 설치
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 공식 Telegram Bot API Server 바이너리 다운로드 및 설치
+RUN DOWNLOAD_URL=$(curl -sL https://api.github.com/repos/tdlib/telegram-bot-api/releases/latest | \
+    grep -o '"browser_download_url": "[^"]*Linux_x86_64.tar.gz"' | \
+    head -1 | \
+    cut -d '"' -f 4) \
+    && if [ -z "$DOWNLOAD_URL" ]; then \
+        DOWNLOAD_URL="https://github.com/tdlib/telegram-bot-api/releases/download/7.7.0/telegram-bot-api_Linux_x86_64.tar.gz"; \
+    fi \
+    && echo "Downloading from: $DOWNLOAD_URL" \
+    && curl -L -f -o telegram-bot-api.tar.gz "$DOWNLOAD_URL" \
+    && tar -xzf telegram-bot-api.tar.gz \
+    && chmod +x telegram-bot-api \
+    && mv telegram-bot-api /usr/local/bin/telegram-bot-api \
+    && rm -f telegram-bot-api.tar.gz \
+    && telegram-bot-api --version || echo "Version check completed"
+
+# 데이터 디렉토리 생성
+RUN mkdir -p /var/lib/telegram-bot-api
 
 # Railway의 동적 포트 사용 (기본값: 8080)
 EXPOSE 8080
 
 # telegram-bot-api 실행
-# shell 형식을 사용하여 Railway의 런타임 환경 변수를 직접 참조
-CMD ["/bin/sh", "-c", "telegram-bot-api --local --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080}"]
+# Railway의 런타임 환경 변수를 직접 참조
+CMD ["/bin/sh", "-c", "/usr/local/bin/telegram-bot-api --local --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api"]

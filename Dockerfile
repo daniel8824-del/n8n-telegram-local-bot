@@ -1,38 +1,26 @@
-# 공식 Telegram Bot API Server를 사용하는 방법
-# 또는 Python 프록시 서버로 구현
+FROM aiogram/telegram-bot-api:latest
 
-FROM python:3.11-slim
-
+# 작업 디렉토리 설정
 WORKDIR /app
 
-# 시스템 의존성 설치
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    make \
-    curl \
-    wget \
-    git \
-    build-essential \
-    cmake \
-    libssl-dev \
-    zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Railway 포트 환경 변수 사용
+ENV PORT=8080
 
-# Python 의존성 복사 및 설치
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Telegram API 환경 변수는 Railway에서 주입됨
+# TELEGRAM_API_ID와 TELEGRAM_API_HASH
 
-# 애플리케이션 코드 복사
-COPY . .
-
-# 포트 노출 (Railway가 자동으로 PORT 환경 변수를 설정)
-EXPOSE 8000
+# 포트 노출
+EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/ || exit 1
 
-# 애플리케이션 실행
-CMD ["python", "app.py"]
-
+# 실행 명령어 (환경 변수 직접 참조)
+CMD telegram-bot-api \
+    --local \
+    --api-id=$TELEGRAM_API_ID \
+    --api-hash=$TELEGRAM_API_HASH \
+    --http-port=8080 \
+    --log=/tmp/telegram-bot-api.log \
+    --verbosity=2
