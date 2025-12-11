@@ -9,6 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     curl \
     ca-certificates \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 # 작업 디렉토리 설정
@@ -17,25 +18,27 @@ WORKDIR /app
 # 공식 Telegram Bot API Server 바이너리 다운로드 및 설치
 # GitHub API를 사용하여 최신 릴리스 URL 동적 가져오기
 # 모든 설치 단계를 하나의 RUN 블록으로 통합
-RUN DOWNLOAD_URL=$(curl -sL https://api.github.com/repos/tdlib/telegram-bot-api/releases/latest | \
-    grep -o '"browser_download_url": "[^"]*Linux_x86_64.tar.gz"' | \
-    head -1 | \
-    cut -d '"' -f 4) \
-    && if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" = "null" ]; then \
+# set -e를 사용하여 에러 발생 시 즉시 종료
+RUN set -e \
+    && echo "Fetching latest release URL from GitHub API..." \
+    && API_RESPONSE=$(curl -sL https://api.github.com/repos/tdlib/telegram-bot-api/releases/latest) \
+    && DOWNLOAD_URL=$(echo "$API_RESPONSE" | jq -r '.assets[] | select(.name | contains("Linux_x86_64.tar.gz")) | .browser_download_url' | head -1) \
+    && if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" = "null" ] || [ "$DOWNLOAD_URL" = "" ]; then \
         echo "ERROR: Failed to get download URL from GitHub API"; \
-        echo "Trying fallback URL..."; \
-        DOWNLOAD_URL="https://github.com/tdlib/telegram-bot-api/releases/latest/download/telegram-bot-api_Linux_x86_64.tar.gz"; \
+        echo "API Response: $API_RESPONSE"; \
+        echo "Trying alternative method with grep..."; \
+        DOWNLOAD_URL=$(echo "$API_RESPONSE" | grep -o '"browser_download_url": "[^"]*Linux_x86_64.tar.gz"' | head -1 | cut -d '"' -f 4); \
     fi \
-    && echo "Downloading telegram-bot-api from: $DOWNLOAD_URL" \
-    && curl -L -f -o telegram-bot-api.tar.gz "$DOWNLOAD_URL" \
-    && CURL_EXIT_CODE=$? \
-    && if [ $CURL_EXIT_CODE -ne 0 ]; then \
-        echo "ERROR: curl failed with exit code $CURL_EXIT_CODE"; \
+    && if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" = "null" ] || [ "$DOWNLOAD_URL" = "" ]; then \
+        echo "ERROR: All methods failed to get download URL"; \
         exit 1; \
     fi \
+    && echo "Download URL: $DOWNLOAD_URL" \
+    && echo "Downloading telegram-bot-api..." \
+    && curl -L -f -o telegram-bot-api.tar.gz "$DOWNLOAD_URL" \
     && if [ ! -f telegram-bot-api.tar.gz ] || [ ! -s telegram-bot-api.tar.gz ]; then \
         echo "ERROR: Download failed or file is empty"; \
-        echo "File size: $(ls -lh telegram-bot-api.tar.gz 2>/dev/null || echo 'file not found')"; \
+        ls -lh telegram-bot-api.tar.gz 2>/dev/null || echo "File does not exist"; \
         exit 1; \
     fi \
     && echo "Download successful, file size: $(ls -lh telegram-bot-api.tar.gz | awk '{print $5}')" \
@@ -60,7 +63,7 @@ RUN DOWNLOAD_URL=$(curl -sL https://api.github.com/repos/tdlib/telegram-bot-api/
     fi \
     && file /usr/local/bin/telegram-bot-api \
     && echo "Testing binary execution..." \
-    && /usr/local/bin/telegram-bot-api --version 2>&1 || echo "Version check completed (exit code: $?)" \
+    && /usr/local/bin/telegram-bot-api --version 2>&1 \
     && echo "Copying binary to /app as backup..." \
     && cp /usr/local/bin/telegram-bot-api /app/telegram-bot-api \
     && chmod +x /app/telegram-bot-api \
