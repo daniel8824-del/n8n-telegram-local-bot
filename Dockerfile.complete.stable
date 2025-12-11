@@ -12,18 +12,32 @@ RUN apt-get update && apt-get install -y \
 # 작업 디렉토리 설정
 WORKDIR /app
 
-# 공식 Telegram Bot API Server 바이너리 다운로드 및 설치
-# 실제 작동하는 릴리스 URL 직접 사용
-RUN set -e \
-    && echo "Downloading telegram-bot-api..." \
-    && curl -L -f -o telegram-bot-api.tar.gz "https://github.com/tdlib/telegram-bot-api/releases/download/8.0.0/telegram-bot-api_Linux_x86_64.tar.gz" \
-    || curl -L -f -o telegram-bot-api.tar.gz "https://github.com/tdlib/telegram-bot-api/releases/download/7.8.0/telegram-bot-api_Linux_x86_64.tar.gz" \
-    || curl -L -f -o telegram-bot-api.tar.gz "https://github.com/tdlib/telegram-bot-api/releases/download/7.7.0/telegram-bot-api_Linux_x86_64.tar.gz" \
+# 공식 Telegram Bot API Server 바이너리 다운로드
+# Dockerfile.complete의 검증된 방식 사용
+RUN DOWNLOAD_URL=$(curl -sL https://api.github.com/repos/tdlib/telegram-bot-api/releases/latest | \
+    grep -o '"browser_download_url": "[^"]*Linux_x86_64.tar.gz"' | \
+    head -1 | \
+    cut -d '"' -f 4) \
+    && if [ -z "$DOWNLOAD_URL" ]; then \
+        echo "ERROR: Failed to get download URL from GitHub API"; \
+        echo "Trying alternative method..."; \
+        DOWNLOAD_URL="https://github.com/tdlib/telegram-bot-api/releases/latest/download/telegram-bot-api_Linux_x86_64.tar.gz"; \
+    fi \
+    && echo "Downloading from: $DOWNLOAD_URL" \
+    && curl -L -f -o telegram-bot-api.tar.gz "$DOWNLOAD_URL" \
+    && if [ ! -f telegram-bot-api.tar.gz ] || [ ! -s telegram-bot-api.tar.gz ]; then \
+        echo "ERROR: Download failed or file is empty"; \
+        exit 1; \
+    fi \
     && tar -xzf telegram-bot-api.tar.gz \
+    && if [ ! -f telegram-bot-api ]; then \
+        echo "ERROR: telegram-bot-api binary not found after extraction"; \
+        ls -la; \
+        exit 1; \
+    fi \
     && mv telegram-bot-api /usr/local/bin/telegram-bot-api \
     && chmod +x /usr/local/bin/telegram-bot-api \
-    && rm -f telegram-bot-api.tar.gz \
-    && /usr/local/bin/telegram-bot-api --version || true
+    && rm -f telegram-bot-api.tar.gz
 
 # 데이터 디렉토리 생성
 RUN mkdir -p /var/lib/telegram-bot-api
