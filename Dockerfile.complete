@@ -1,0 +1,73 @@
+# 완전한 솔루션: Local Bot API Server + 프록시 서버를 하나의 컨테이너에서 실행
+# 이 방법으로 Railway에 한 번에 배포 가능
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 필수 패키지 설치
+RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
+    ca-certificates \
+    python3.11 \
+    python3-pip \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python 심볼릭 링크 생성
+RUN ln -s /usr/bin/python3.11 /usr/bin/python
+
+# 공식 Telegram Bot API Server 바이너리 다운로드
+# 최신 버전: https://github.com/tdlib/telegram-bot-api/releases
+ARG BOT_API_VERSION=7.7.0
+RUN wget -q https://github.com/tdlib/telegram-bot-api/releases/download/v${BOT_API_VERSION}/telegram-bot-api_Linux_x86_64.tar.gz \
+    && tar -xzf telegram-bot-api_Linux_x86_64.tar.gz \
+    && mv telegram-bot-api /usr/local/bin/ \
+    && chmod +x /usr/local/bin/telegram-bot-api \
+    && rm telegram-bot-api_Linux_x86_64.tar.gz
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# Python 의존성 설치
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# 애플리케이션 코드 복사
+COPY app.py .
+
+# 데이터 디렉토리 생성
+RUN mkdir -p /var/lib/telegram-bot-api
+
+# Supervisor 설정 파일 생성
+RUN echo '[supervisord]' > /etc/supervisor/conf.d/supervisord.conf \
+    && echo 'nodaemon=true' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo 'user=root' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo '' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo '[program:telegram-bot-api]' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo 'command=/usr/local/bin/telegram-bot-api --local --http-port 8081 --dir /var/lib/telegram-bot-api' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo 'autostart=true' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo 'autorestart=true' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo 'stderr_logfile=/var/log/telegram-bot-api.err.log' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo 'stdout_logfile=/var/log/telegram-bot-api.out.log' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo '' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo '[program:api-proxy]' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo 'command=python3 app.py' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo 'directory=/app' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo 'autostart=true' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo 'autorestart=true' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo 'environment=PORT="8000",LOCAL_API_URL="http://localhost:8081"' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo 'stderr_logfile=/var/log/api-proxy.err.log' >> /etc/supervisor/conf.d/supervisord.conf \
+    && echo 'stdout_logfile=/var/log/api-proxy.out.log' >> /etc/supervisor/conf.d/supervisord.conf
+
+# 포트 노출
+EXPOSE 8000 8081
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Supervisor로 두 서비스 모두 실행
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+

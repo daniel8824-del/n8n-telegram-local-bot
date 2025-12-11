@@ -1,0 +1,43 @@
+# 공식 Telegram Bot API Server를 사용하는 Dockerfile
+# 이 파일은 실제 Local Bot API Server를 Railway에 배포할 때 사용
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 필수 패키지 설치
+RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 공식 Telegram Bot API Server 바이너리 다운로드
+# 최신 버전은 https://github.com/tdlib/telegram-bot-api/releases 에서 확인
+ARG BOT_API_VERSION=7.7.0
+RUN wget -q https://github.com/tdlib/telegram-bot-api/releases/download/v${BOT_API_VERSION}/telegram-bot-api_Linux_x86_64.tar.gz \
+    && tar -xzf telegram-bot-api_Linux_x86_64.tar.gz \
+    && mv telegram-bot-api /usr/local/bin/ \
+    && chmod +x /usr/local/bin/telegram-bot-api \
+    && rm telegram-bot-api_Linux_x86_64.tar.gz
+
+# 데이터 디렉토리 생성
+RUN mkdir -p /var/lib/telegram-bot-api
+
+WORKDIR /var/lib/telegram-bot-api
+
+# 포트 노출
+EXPOSE 8081
+
+# 환경 변수
+ENV TELEGRAM_API_ID=""
+ENV TELEGRAM_API_HASH=""
+ENV TELEGRAM_LOCAL=true
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:8081/health || exit 1
+
+# 실행
+CMD ["telegram-bot-api", "--local", "--http-port", "8081", "--dir", "/var/lib/telegram-bot-api"]
+
