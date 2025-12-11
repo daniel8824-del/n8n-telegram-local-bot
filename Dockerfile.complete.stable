@@ -1,86 +1,24 @@
-# Telegram Bot API Server - 안정적인 버전
-# 직접 바이너리 다운로드 방식
+# 공식 TDLib Telegram Bot API 이미지 사용
+FROM ghcr.io/tdlib/telegram-bot-api:latest
 
-FROM ubuntu:22.04
+# 작업 디렉토리
+WORKDIR /var/lib/telegram-bot-api
 
-ENV DEBIAN_FRONTEND=noninteractive
+# Railway 포트 환경 변수 (기본값 8080)
+ENV PORT=8080
 
-# 필수 패키지 설치
-RUN apt-get update && apt-get install -y \
-    curl \
-    ca-certificates \
-    jq \
-    && rm -rf /var/lib/apt/lists/*
-
-# 작업 디렉토리 설정
-WORKDIR /app
-
-# 공식 Telegram Bot API Server 바이너리 다운로드 및 설치
-# 실제로 작동하는 특정 버전의 다운로드 URL 직접 사용
-# 모든 설치 단계를 하나의 RUN 블록으로 통합
-# set -e를 사용하여 에러 발생 시 즉시 종료
-RUN set -e \
-    && echo "Downloading telegram-bot-api..." \
-    && DOWNLOAD_URL="https://github.com/tdlib/telegram-bot-api/releases/download/8.0.0/telegram-bot-api_Linux_x86_64.tar.gz" \
-    && echo "Download URL: $DOWNLOAD_URL" \
-    && curl -L -f -o telegram-bot-api.tar.gz "$DOWNLOAD_URL" || ( \
-        echo "First URL failed, trying alternative..." \
-        && DOWNLOAD_URL="https://github.com/tdlib/telegram-bot-api/releases/download/7.8.0/telegram-bot-api_Linux_x86_64.tar.gz" \
-        && echo "Alternative URL: $DOWNLOAD_URL" \
-        && curl -L -f -o telegram-bot-api.tar.gz "$DOWNLOAD_URL" \
-    ) \
-    && if [ ! -f telegram-bot-api.tar.gz ] || [ ! -s telegram-bot-api.tar.gz ]; then \
-        echo "ERROR: Download failed or file is empty"; \
-        ls -lh telegram-bot-api.tar.gz 2>/dev/null || echo "File does not exist"; \
-        exit 1; \
-    fi \
-    && echo "Download successful, file size: $(ls -lh telegram-bot-api.tar.gz | awk '{print $5}')" \
-    && echo "Extracting archive..." \
-    && tar -xzf telegram-bot-api.tar.gz \
-    && echo "Contents after extraction:" \
-    && ls -la \
-    && if [ ! -f telegram-bot-api ]; then \
-        echo "ERROR: telegram-bot-api binary not found after extraction"; \
-        echo "Looking for any executable files..."; \
-        find . -type f -executable -ls; \
-        exit 1; \
-    fi \
-    && echo "Installing binary to /usr/local/bin/..." \
-    && mv telegram-bot-api /usr/local/bin/telegram-bot-api \
-    && chmod +x /usr/local/bin/telegram-bot-api \
-    && echo "Verifying installation..." \
-    && ls -lh /usr/local/bin/telegram-bot-api \
-    && if [ ! -f /usr/local/bin/telegram-bot-api ]; then \
-        echo "ERROR: Binary not found at /usr/local/bin/telegram-bot-api"; \
-        exit 1; \
-    fi \
-    && file /usr/local/bin/telegram-bot-api \
-    && echo "Testing binary execution..." \
-    && /usr/local/bin/telegram-bot-api --version 2>&1 \
-    && echo "Copying binary to /app as backup..." \
-    && cp /usr/local/bin/telegram-bot-api /app/telegram-bot-api \
-    && chmod +x /app/telegram-bot-api \
-    && echo "Verifying backup copy..." \
-    && ls -lh /app/telegram-bot-api \
-    && rm -f telegram-bot-api.tar.gz \
-    && echo "Binary installed successfully at /usr/local/bin/telegram-bot-api and /app/telegram-bot-api"
-
-# 데이터 디렉토리 생성
+# 데이터 디렉토리
 RUN mkdir -p /var/lib/telegram-bot-api
 
-# Railway의 동적 포트 사용 (기본값: 8080)
-EXPOSE 8080
+# 헬스체크
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/ || exit 1
 
-# telegram-bot-api 실행
-# Railway의 런타임 환경 변수를 직접 참조
-# 여러 경로를 시도하여 바이너리 찾기
-CMD ["/bin/sh", "-c", "if [ -f /usr/local/bin/telegram-bot-api ]; then \
-    /usr/local/bin/telegram-bot-api --local --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api; \
-elif [ -f /app/telegram-bot-api ]; then \
-    /app/telegram-bot-api --local --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api; \
-else \
-    echo 'ERROR: telegram-bot-api binary not found'; \
-    echo 'Searching for binary...'; \
-    find / -name telegram-bot-api -type f 2>/dev/null || true; \
-    exit 1; \
-fi"]
+# 실행 (Railway 환경 변수 사용)
+CMD telegram-bot-api \
+    --local \
+    --api-id=${TELEGRAM_API_ID} \
+    --api-hash=${TELEGRAM_API_HASH} \
+    --http-port=${PORT} \
+    --dir=/var/lib/telegram-bot-api \
+    --verbosity=2
