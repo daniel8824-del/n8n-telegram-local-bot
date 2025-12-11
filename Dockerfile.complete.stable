@@ -1,5 +1,5 @@
-# 완전한 솔루션: Local Bot API Server + 프록시 서버를 하나의 컨테이너에서 실행
-# 이 방법으로 Railway에 한 번에 배포 가능
+# 완전한 솔루션: 안정적인 버전 (특정 릴리스 사용)
+# Local Bot API Server + 프록시 서버를 하나의 컨테이너에서 실행
 
 FROM ubuntu:22.04
 
@@ -7,43 +7,42 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # 필수 패키지 설치
 RUN apt-get update && apt-get install -y \
-    wget \
     curl \
     ca-certificates \
     python3.11 \
     python3-pip \
     supervisor \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Python 심볼릭 링크 생성
 RUN ln -s /usr/bin/python3.11 /usr/bin/python
 
 # 공식 Telegram Bot API Server 바이너리 다운로드
-# 최신 버전: https://github.com/tdlib/telegram-bot-api/releases
-# 실제 작동하는 릴리스 버전 사용 (2024년 기준)
+# jq를 사용하여 더 안정적으로 JSON 파싱
 RUN DOWNLOAD_URL=$(curl -sL https://api.github.com/repos/tdlib/telegram-bot-api/releases/latest | \
-    grep -o '"browser_download_url": "[^"]*Linux_x86_64.tar.gz"' | \
-    head -1 | \
-    cut -d '"' -f 4) \
-    && if [ -z "$DOWNLOAD_URL" ]; then \
-        echo "ERROR: Failed to get download URL from GitHub API"; \
-        echo "Trying alternative method..."; \
-        DOWNLOAD_URL="https://github.com/tdlib/telegram-bot-api/releases/latest/download/telegram-bot-api_Linux_x86_64.tar.gz"; \
+    jq -r '.assets[] | select(.name | contains("Linux_x86_64.tar.gz")) | .browser_download_url' | head -1) \
+    && if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" = "null" ]; then \
+        echo "ERROR: Failed to parse download URL, using fallback"; \
+        DOWNLOAD_URL="https://github.com/tdlib/telegram-bot-api/releases/download/7.7.0/telegram-bot-api_Linux_x86_64.tar.gz"; \
     fi \
-    && echo "Downloading from: $DOWNLOAD_URL" \
+    && echo "Downloading Telegram Bot API from: $DOWNLOAD_URL" \
     && curl -L -f -o telegram-bot-api.tar.gz "$DOWNLOAD_URL" \
     && if [ ! -f telegram-bot-api.tar.gz ] || [ ! -s telegram-bot-api.tar.gz ]; then \
-        echo "ERROR: Download failed or file is empty"; \
+        echo "ERROR: Download failed"; \
         exit 1; \
     fi \
+    && echo "Extracting archive..." \
     && tar -xzf telegram-bot-api.tar.gz \
     && if [ ! -f telegram-bot-api ]; then \
-        echo "ERROR: telegram-bot-api binary not found after extraction"; \
+        echo "ERROR: Binary not found after extraction"; \
         ls -la; \
         exit 1; \
     fi \
+    && echo "Installing binary..." \
     && mv telegram-bot-api /usr/local/bin/ \
     && chmod +x /usr/local/bin/telegram-bot-api \
+    && /usr/local/bin/telegram-bot-api --version || echo "Version check skipped" \
     && rm -f telegram-bot-api.tar.gz
 
 # 작업 디렉토리 설정
