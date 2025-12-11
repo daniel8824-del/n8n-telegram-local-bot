@@ -1,8 +1,9 @@
 # aiogram/telegram-bot-api 이미지 사용 (Docker Hub에서 제공)
 FROM aiogram/telegram-bot-api:latest
 
-# Local 모드 활성화
-ENV TELEGRAM_LOCAL=1
+# Local 모드 비활성화 (HTTP 파일 다운로드 지원)
+# TELEGRAM_LOCAL=1을 사용하면 파일이 로컬에 저장되어 HTTP로 접근 불가
+# 비활성화하면 /file/bot{TOKEN}/{file_path} 형식으로 다운로드 가능
 
 # Railway 환경 변수에서 다음을 설정해야 함:
 # - TELEGRAM_API_ID
