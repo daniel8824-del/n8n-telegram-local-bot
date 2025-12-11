@@ -1,92 +1,15 @@
-# 완전한 솔루션: 안정적인 버전 (특정 릴리스 사용)
-# Local Bot API Server + 프록시 서버를 하나의 컨테이너에서 실행
+# Telegram Bot API Server - 간단한 버전
+# aiogram/telegram-bot-api 이미지 사용
 
-FROM ubuntu:22.04
+FROM aiogram/telegram-bot-api:latest
 
-ENV DEBIAN_FRONTEND=noninteractive
+# 환경 변수 설정
+ENV TELEGRAM_API_ID=${TELEGRAM_API_ID}
+ENV TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
 
-# 필수 패키지 설치
-RUN apt-get update && apt-get install -y \
-    curl \
-    ca-certificates \
-    python3.11 \
-    python3-pip \
-    supervisor \
-    jq \
-    && rm -rf /var/lib/apt/lists/*
+# Railway의 동적 포트 사용 (기본값: 8080)
+EXPOSE ${PORT:-8080}
 
-# Python 심볼릭 링크 생성
-RUN ln -s /usr/bin/python3.11 /usr/bin/python
-
-# 공식 Telegram Bot API Server 바이너리 다운로드
-# jq를 사용하여 더 안정적으로 JSON 파싱
-RUN DOWNLOAD_URL=$(curl -sL https://api.github.com/repos/tdlib/telegram-bot-api/releases/latest | \
-    jq -r '.assets[] | select(.name | contains("Linux_x86_64.tar.gz")) | .browser_download_url' | head -1) \
-    && if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" = "null" ]; then \
-        echo "ERROR: Failed to parse download URL, using fallback"; \
-        DOWNLOAD_URL="https://github.com/tdlib/telegram-bot-api/releases/download/7.7.0/telegram-bot-api_Linux_x86_64.tar.gz"; \
-    fi \
-    && echo "Downloading Telegram Bot API from: $DOWNLOAD_URL" \
-    && curl -L -f -o telegram-bot-api.tar.gz "$DOWNLOAD_URL" \
-    && if [ ! -f telegram-bot-api.tar.gz ] || [ ! -s telegram-bot-api.tar.gz ]; then \
-        echo "ERROR: Download failed"; \
-        exit 1; \
-    fi \
-    && echo "Extracting archive..." \
-    && tar -xzf telegram-bot-api.tar.gz \
-    && if [ ! -f telegram-bot-api ]; then \
-        echo "ERROR: Binary not found after extraction"; \
-        ls -la; \
-        exit 1; \
-    fi \
-    && echo "Installing binary..." \
-    && mv telegram-bot-api /usr/local/bin/ \
-    && chmod +x /usr/local/bin/telegram-bot-api \
-    && /usr/local/bin/telegram-bot-api --version || echo "Version check skipped" \
-    && rm -f telegram-bot-api.tar.gz
-
-# 작업 디렉토리 설정
-WORKDIR /app
-
-# Python 의존성 설치
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
-
-# 애플리케이션 코드 복사
-COPY app.py .
-
-# 데이터 디렉토리 생성
-RUN mkdir -p /var/lib/telegram-bot-api
-
-# Supervisor 설정 파일 생성
-RUN echo '[supervisord]' > /etc/supervisor/conf.d/supervisord.conf \
-    && echo 'nodaemon=true' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo 'user=root' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo '' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo '[program:telegram-bot-api]' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo 'command=/usr/local/bin/telegram-bot-api --local --http-port 8081 --dir /var/lib/telegram-bot-api' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo 'autostart=true' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo 'autorestart=true' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo 'stderr_logfile=/var/log/telegram-bot-api.err.log' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo 'stdout_logfile=/var/log/telegram-bot-api.out.log' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo '' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo '[program:api-proxy]' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo 'command=python3 app.py' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo 'directory=/app' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo 'autostart=true' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo 'autorestart=true' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo 'environment=LOCAL_API_URL="http://localhost:8081"' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo 'stderr_logfile=/var/log/api-proxy.err.log' >> /etc/supervisor/conf.d/supervisord.conf \
-    && echo 'stdout_logfile=/var/log/api-proxy.out.log' >> /etc/supervisor/conf.d/supervisord.conf
-
-# 포트 노출
-# Railway가 자동으로 PORT 환경 변수를 설정하므로 동적으로 사용됨
-EXPOSE 8080 8081
-
-# Health check (Railway의 PORT 환경 변수 사용)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
-
-# Supervisor로 두 서비스 모두 실행
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
-
+# telegram-bot-api 실행 (올바른 경로)
+# shell 형식을 사용하여 환경 변수를 런타임에 확장
+CMD ["/bin/sh", "-c", "telegram-bot-api --local --api-id=${TELEGRAM_API_ID} --api-hash=${TELEGRAM_API_HASH} --http-port=${PORT:-8080}"]
