@@ -1,41 +1,10 @@
-# Telegram Bot API Server - 직접 바이너리 다운로드 방식
-FROM ubuntu:22.04
+# aiogram/telegram-bot-api 이미지 사용 (Docker Hub에서 제공)
+FROM aiogram/telegram-bot-api:latest
 
-ENV DEBIAN_FRONTEND=noninteractive
+# Local 모드 활성화
+ENV TELEGRAM_LOCAL=1
 
-# 필수 패키지 설치
-RUN apt-get update && apt-get install -y \
-    curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# 작업 디렉토리 설정
-WORKDIR /app
-
-# 공식 Telegram Bot API Server 바이너리 다운로드
-# 실제 존재하는 버전 사용 (Dockerfile.local-api 방식 참고)
-RUN set -e \
-    && echo "Downloading telegram-bot-api..." \
-    && curl -L -f -o telegram-bot-api.tar.gz "https://github.com/tdlib/telegram-bot-api/releases/download/v7.7.0/telegram-bot-api_Linux_x86_64.tar.gz" \
-    || curl -L -f -o telegram-bot-api.tar.gz "https://github.com/tdlib/telegram-bot-api/releases/download/v7.8.0/telegram-bot-api_Linux_x86_64.tar.gz" \
-    || curl -L -f -o telegram-bot-api.tar.gz "https://github.com/tdlib/telegram-bot-api/releases/download/v8.0.0/telegram-bot-api_Linux_x86_64.tar.gz" \
-    || (echo "ERROR: All download URLs failed" && exit 1) \
-    && tar -xzf telegram-bot-api.tar.gz \
-    && if [ ! -f telegram-bot-api ]; then \
-        echo "ERROR: telegram-bot-api binary not found after extraction"; \
-        ls -la; \
-        exit 1; \
-    fi \
-    && mv telegram-bot-api /usr/local/bin/telegram-bot-api \
-    && chmod +x /usr/local/bin/telegram-bot-api \
-    && rm -f telegram-bot-api.tar.gz \
-    && echo "Successfully installed telegram-bot-api"
-
-# 데이터 디렉토리 생성
-RUN mkdir -p /var/lib/telegram-bot-api
-
-# Railway의 동적 포트 사용
-EXPOSE 8080
-
-# telegram-bot-api 실행 (Railway 런타임 환경 변수 사용)
-CMD ["/bin/sh", "-c", "/usr/local/bin/telegram-bot-api --local --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api"]
+# Railway 환경 변수에서 다음을 설정해야 함:
+# - TELEGRAM_API_ID
+# - TELEGRAM_API_HASH
+# - TELEGRAM_HTTP_PORT (Railway PORT 값 사용)
