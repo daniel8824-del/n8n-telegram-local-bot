@@ -11,8 +11,12 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# 작업 디렉토리 설정
+WORKDIR /app
+
 # 공식 Telegram Bot API Server 바이너리 다운로드 및 설치
 # 안정적인 특정 버전 사용 (7.7.0)
+# 모든 설치 단계를 하나의 RUN 블록으로 통합
 RUN DOWNLOAD_URL="https://github.com/tdlib/telegram-bot-api/releases/download/7.7.0/telegram-bot-api_Linux_x86_64.tar.gz" \
     && echo "Downloading telegram-bot-api from: $DOWNLOAD_URL" \
     && curl -L -f -o telegram-bot-api.tar.gz "$DOWNLOAD_URL" \
@@ -33,7 +37,6 @@ RUN DOWNLOAD_URL="https://github.com/tdlib/telegram-bot-api/releases/download/7.
     && echo "Installing binary to /usr/local/bin/..." \
     && mv telegram-bot-api /usr/local/bin/telegram-bot-api \
     && chmod +x /usr/local/bin/telegram-bot-api \
-    && rm -f telegram-bot-api.tar.gz \
     && echo "Verifying installation..." \
     && ls -lh /usr/local/bin/telegram-bot-api \
     && if [ ! -f /usr/local/bin/telegram-bot-api ]; then \
@@ -43,16 +46,16 @@ RUN DOWNLOAD_URL="https://github.com/tdlib/telegram-bot-api/releases/download/7.
     && file /usr/local/bin/telegram-bot-api \
     && echo "Testing binary execution..." \
     && /usr/local/bin/telegram-bot-api --version 2>&1 || echo "Version check completed (exit code: $?)" \
-    && echo "Binary installed successfully at /usr/local/bin/telegram-bot-api"
-
-# 작업 디렉토리 설정
-WORKDIR /app
+    && echo "Copying binary to /app as backup..." \
+    && cp /usr/local/bin/telegram-bot-api /app/telegram-bot-api \
+    && chmod +x /app/telegram-bot-api \
+    && echo "Verifying backup copy..." \
+    && ls -lh /app/telegram-bot-api \
+    && rm -f telegram-bot-api.tar.gz \
+    && echo "Binary installed successfully at /usr/local/bin/telegram-bot-api and /app/telegram-bot-api"
 
 # 데이터 디렉토리 생성
 RUN mkdir -p /var/lib/telegram-bot-api
-
-# 바이너리를 /app에도 복사 (백업)
-RUN cp /usr/local/bin/telegram-bot-api /app/telegram-bot-api || true
 
 # Railway의 동적 포트 사용 (기본값: 8080)
 EXPOSE 8080
