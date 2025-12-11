@@ -4,5 +4,8 @@ FROM aiogram/telegram-bot-api:latest
 # 포트 노출
 EXPOSE 8080
 
-# 환경 변수를 직접 CMD에서 사용
+# 기본 ENTRYPOINT 덮어쓰기
+ENTRYPOINT []
+
+# 환경 변수를 직접 사용해서 실행
 CMD ["sh", "-c", "telegram-bot-api --api-id=${TELEGRAM_API_ID} --api-hash=${TELEGRAM_API_HASH} --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api"]
