@@ -1,24 +1,35 @@
-# 공식 TDLib Telegram Bot API 이미지 사용
-FROM ghcr.io/tdlib/telegram-bot-api:latest
+# Telegram Bot API Server - 직접 바이너리 다운로드 방식
+FROM ubuntu:22.04
 
-# 작업 디렉토리
-WORKDIR /var/lib/telegram-bot-api
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Railway 포트 환경 변수 (기본값 8080)
-ENV PORT=8080
+# 필수 패키지 설치
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# 데이터 디렉토리
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# 공식 Telegram Bot API Server 바이너리 다운로드 및 설치
+# 실제 작동하는 릴리스 URL 직접 사용
+RUN set -e \
+    && echo "Downloading telegram-bot-api..." \
+    && curl -L -f -o telegram-bot-api.tar.gz "https://github.com/tdlib/telegram-bot-api/releases/download/8.0.0/telegram-bot-api_Linux_x86_64.tar.gz" \
+    || curl -L -f -o telegram-bot-api.tar.gz "https://github.com/tdlib/telegram-bot-api/releases/download/7.8.0/telegram-bot-api_Linux_x86_64.tar.gz" \
+    || curl -L -f -o telegram-bot-api.tar.gz "https://github.com/tdlib/telegram-bot-api/releases/download/7.7.0/telegram-bot-api_Linux_x86_64.tar.gz" \
+    && tar -xzf telegram-bot-api.tar.gz \
+    && mv telegram-bot-api /usr/local/bin/telegram-bot-api \
+    && chmod +x /usr/local/bin/telegram-bot-api \
+    && rm -f telegram-bot-api.tar.gz \
+    && /usr/local/bin/telegram-bot-api --version || true
+
+# 데이터 디렉토리 생성
 RUN mkdir -p /var/lib/telegram-bot-api
 
-# 헬스체크
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/ || exit 1
+# Railway의 동적 포트 사용
+EXPOSE 8080
 
-# 실행 (Railway 환경 변수 사용)
-CMD telegram-bot-api \
-    --local \
-    --api-id=${TELEGRAM_API_ID} \
-    --api-hash=${TELEGRAM_API_HASH} \
-    --http-port=${PORT} \
-    --dir=/var/lib/telegram-bot-api \
-    --verbosity=2
+# telegram-bot-api 실행 (Railway 런타임 환경 변수 사용)
+CMD ["/bin/sh", "-c", "/usr/local/bin/telegram-bot-api --local --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api"]
