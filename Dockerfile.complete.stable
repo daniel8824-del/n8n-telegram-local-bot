@@ -12,27 +12,61 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # 공식 Telegram Bot API Server 바이너리 다운로드 및 설치
-RUN DOWNLOAD_URL=$(curl -sL https://api.github.com/repos/tdlib/telegram-bot-api/releases/latest | \
-    grep -o '"browser_download_url": "[^"]*Linux_x86_64.tar.gz"' | \
-    head -1 | \
-    cut -d '"' -f 4) \
-    && if [ -z "$DOWNLOAD_URL" ]; then \
-        DOWNLOAD_URL="https://github.com/tdlib/telegram-bot-api/releases/download/7.7.0/telegram-bot-api_Linux_x86_64.tar.gz"; \
-    fi \
-    && echo "Downloading from: $DOWNLOAD_URL" \
+# 안정적인 특정 버전 사용 (7.7.0)
+RUN DOWNLOAD_URL="https://github.com/tdlib/telegram-bot-api/releases/download/7.7.0/telegram-bot-api_Linux_x86_64.tar.gz" \
+    && echo "Downloading telegram-bot-api from: $DOWNLOAD_URL" \
     && curl -L -f -o telegram-bot-api.tar.gz "$DOWNLOAD_URL" \
+    && if [ ! -f telegram-bot-api.tar.gz ] || [ ! -s telegram-bot-api.tar.gz ]; then \
+        echo "ERROR: Download failed or file is empty"; \
+        exit 1; \
+    fi \
+    && echo "Extracting archive..." \
     && tar -xzf telegram-bot-api.tar.gz \
-    && chmod +x telegram-bot-api \
+    && echo "Contents after extraction:" \
+    && ls -la \
+    && if [ ! -f telegram-bot-api ]; then \
+        echo "ERROR: telegram-bot-api binary not found after extraction"; \
+        echo "Looking for any executable files..."; \
+        find . -type f -executable -ls; \
+        exit 1; \
+    fi \
+    && echo "Installing binary to /usr/local/bin/..." \
     && mv telegram-bot-api /usr/local/bin/telegram-bot-api \
+    && chmod +x /usr/local/bin/telegram-bot-api \
     && rm -f telegram-bot-api.tar.gz \
-    && telegram-bot-api --version || echo "Version check completed"
+    && echo "Verifying installation..." \
+    && ls -lh /usr/local/bin/telegram-bot-api \
+    && if [ ! -f /usr/local/bin/telegram-bot-api ]; then \
+        echo "ERROR: Binary not found at /usr/local/bin/telegram-bot-api"; \
+        exit 1; \
+    fi \
+    && file /usr/local/bin/telegram-bot-api \
+    && echo "Testing binary execution..." \
+    && /usr/local/bin/telegram-bot-api --version 2>&1 || echo "Version check completed (exit code: $?)" \
+    && echo "Binary installed successfully at /usr/local/bin/telegram-bot-api"
+
+# 작업 디렉토리 설정
+WORKDIR /app
 
 # 데이터 디렉토리 생성
 RUN mkdir -p /var/lib/telegram-bot-api
+
+# 바이너리를 /app에도 복사 (백업)
+RUN cp /usr/local/bin/telegram-bot-api /app/telegram-bot-api || true
 
 # Railway의 동적 포트 사용 (기본값: 8080)
 EXPOSE 8080
 
 # telegram-bot-api 실행
 # Railway의 런타임 환경 변수를 직접 참조
-CMD ["/bin/sh", "-c", "/usr/local/bin/telegram-bot-api --local --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api"]
+# 여러 경로를 시도하여 바이너리 찾기
+CMD ["/bin/sh", "-c", "if [ -f /usr/local/bin/telegram-bot-api ]; then \
+    /usr/local/bin/telegram-bot-api --local --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api; \
+elif [ -f /app/telegram-bot-api ]; then \
+    /app/telegram-bot-api --local --api-id=$TELEGRAM_API_ID --api-hash=$TELEGRAM_API_HASH --http-port=${PORT:-8080} --dir=/var/lib/telegram-bot-api; \
+else \
+    echo 'ERROR: telegram-bot-api binary not found'; \
+    echo 'Searching for binary...'; \
+    find / -name telegram-bot-api -type f 2>/dev/null || true; \
+    exit 1; \
+fi"]
